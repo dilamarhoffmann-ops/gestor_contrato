@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { NegotiationData, TankItem, AddressData, ThirdPartyItem } from '../types';
 import { LISTS } from '../constants';
 import { SectionCard } from '../components/SectionCard';
+import { SectionFAQ } from '../components/SectionFAQ';
 import { Building2, Calculator, MapPin, User, FileText, ShieldCheck, Flag, Plus, Trash2, HardHat, Hourglass, Fuel, ScrollText, Leaf, Ban, Scale, MessageSquare, UploadCloud, Eye, Download, Search, Loader2 } from 'lucide-react';
 import { uploadFileToS3 } from '../services/s3';
 
@@ -138,6 +139,28 @@ export const NegotiationForm: React.FC<NegotiationFormProps> = ({ data, onChange
       const currentTanks = [...(data.tanques || [])];
       currentTanks[index] = { ...currentTanks[index], [field]: value };
       onChange('tanques', currentTanks);
+   };
+
+   const SECTION_FAQS: Record<string, { question: string, answer: string }[]> = {
+      '1': [
+         { question: 'Por que o número do projeto é obrigatório?', answer: 'Este número é a chave de identificação única no sistema e no SAP. Caso não tenha, use o padrão provisório sugerido pelo coordenador.' },
+         { question: 'Qual a diferença entre Responsável Comercial e Técnico?', answer: 'O comercial lidera a negociação de valores, enquanto o técnico avalia a viabilidade física e operacional do terreno.' }
+      ],
+      '4': [
+         { question: 'O que é um Terceiro Envolvido?', answer: 'São advogados, corretores ou representantes que participam da negociação mas não são os assinantes principais do contrato.' },
+         { question: 'Como funciona a busca por CNPJ?', answer: 'Ao digitar o CNPJ, o sistema consulta a API da Receita Federal para preencher automaticamente a Razão Social.' }
+      ],
+      '7': [
+         { question: 'Aluguel Fixo vs Variável?', answer: 'Fixo é um valor imutável mensal. Variável depende de performance (ex: litros vendidos). "Built to Suit" é o modelo onde o grupo constrói e paga aluguel amortizado.' },
+         { question: 'O que é o Indexador?', answer: 'É o índice usado para o reajuste anual. Geralmente IPCA ou IGPM. A data-base é o mês de aniversário da assinatura.' }
+      ],
+      '12': [
+         { question: 'Direito de Preferência?', answer: 'Garante que o Grupo tenha prioridade de compra caso o proprietário decida vender o imóvel durante a vigência do contrato.' },
+         { question: 'Denúncia Vazia?', answer: 'É a possibilidade de encerrar o contrato sem motivo específico, geralmente mediante aviso prévio de 6 a 12 meses.' }
+      ],
+      '15': [
+         { question: 'Onde ficam salvos os anexos?', answer: 'Os arquivos são enviados com segurança para o Amazon S3 e vinculados permanentemente a este projeto.' }
+      ]
    };
 
    // File Upload Management
@@ -393,10 +416,10 @@ export const NegotiationForm: React.FC<NegotiationFormProps> = ({ data, onChange
                         key={tab.id}
                         onClick={() => setActiveSection(tab.id)}
                         className={`
-                  flex items-center gap-2 px-4 py-4 text-sm font-medium transition-colors border-b-2
-                  ${activeSection === tab.id
+                   flex items-center gap-2 px-4 py-4 text-sm font-medium transition-all border-b-2 whitespace-nowrap
+                   ${activeSection === tab.id
                               ? 'border-blue-600 text-blue-600 bg-blue-50/50'
-                              : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50'
+                              : 'border-transparent text-gray-400 hover:text-gray-700 hover:bg-gray-100/50 hover:scale-[1.02]'
                            }
                 `}
                      >
@@ -480,6 +503,7 @@ export const NegotiationForm: React.FC<NegotiationFormProps> = ({ data, onChange
                      <p className="text-xs text-gray-500 mt-2">Preencha a qualificação completa na Seção 4 (Partes Envolvidas).</p>
                   </div>
                </div>
+               <SectionFAQ sectionId="1" items={SECTION_FAQS['1'] || []} />
             </SectionCard>
          )}
 
@@ -1000,7 +1024,7 @@ export const NegotiationForm: React.FC<NegotiationFormProps> = ({ data, onChange
                               <button
                                  type="button"
                                  onClick={handleAddCompany}
-                                 className="bg-blue-600 text-white p-2 rounded-md hover:bg-blue-700 flex items-center justify-center transition-colors"
+                                 className="bg-blue-600 text-white p-2 rounded-md btn-premium btn-hover-lift flex items-center justify-center"
                               >
                                  <Plus size={20} />
                               </button>
@@ -1610,14 +1634,16 @@ export const NegotiationForm: React.FC<NegotiationFormProps> = ({ data, onChange
                      </div>
                   </div>
                   {data.renovacaoAutomatica && (
-                     <div className="bg-gray-50 p-4 rounded-md border border-gray-100 grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div>
-                           <label className="block text-sm font-medium text-gray-700 mb-1">Prazo da renovação (meses)</label>
-                           <input type="number" name="prazoRenovacaoMeses" value={data.prazoRenovacaoMeses || ''} onChange={handleChange} className="w-full border-gray-300 rounded-md shadow-sm border p-2 bg-white text-black" />
-                        </div>
-                        <div>
-                           <label className="block text-sm font-medium text-gray-700 mb-1">Condições de renovação</label>
-                           <input type="text" name="condicoesRenovacao" value={data.condicoesRenovacao || ''} onChange={handleChange} className="w-full border-gray-300 rounded-md shadow-sm border p-2 bg-white text-black" placeholder="Mesmo aluguel, reajustado, renegociado" />
+                     <div className="bg-gray-50 p-4 rounded-md border border-gray-100">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                           <div>
+                              <label className="block text-sm font-medium text-gray-700 mb-1">Prazo da renovação (meses)</label>
+                              <input type="number" name="prazoRenovacaoMeses" value={data.prazoRenovacaoMeses || ''} onChange={handleChange} className="w-full border-gray-300 rounded-md shadow-sm border p-2 bg-white text-black" />
+                           </div>
+                           <div>
+                              <label className="block text-sm font-medium text-gray-700 mb-1">Condições de renovação</label>
+                              <input type="text" name="condicoesRenovacao" value={data.condicoesRenovacao || ''} onChange={handleChange} className="w-full border-gray-300 rounded-md shadow-sm border p-2 bg-white text-black" placeholder="Mesmo aluguel, reajustado, renegociado" />
+                           </div>
                         </div>
                      </div>
                   )}
@@ -1654,6 +1680,7 @@ export const NegotiationForm: React.FC<NegotiationFormProps> = ({ data, onChange
                      </select>
                   </div>
                </div>
+               <SectionFAQ sectionId="12" items={SECTION_FAQS['12'] || []} />
             </SectionCard>
          )}
 
@@ -1833,6 +1860,7 @@ export const NegotiationForm: React.FC<NegotiationFormProps> = ({ data, onChange
                      </div>
                   </div>
                </div>
+               <SectionFAQ sectionId="15" items={SECTION_FAQS['15'] || []} />
             </SectionCard>
          )}
 
