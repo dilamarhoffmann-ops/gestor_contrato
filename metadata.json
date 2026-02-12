@@ -1,0 +1,5 @@
+{
+  "name": "Gestor de Negociação de Postos",
+  "description": "Sistema integrado para gestão de negociações de postos de combustíveis, incluindo análise de risco automática, due diligence e geração de term sheet.",
+  "requestFramePermissions": []
+}
