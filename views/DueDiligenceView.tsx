@@ -1,6 +1,6 @@
-import React, { useMemo } from 'react';
 import { DueDiligenceItem } from '../types';
-import { UploadCloud, FileText, Trash2 } from 'lucide-react';
+import { UploadCloud, FileText, Trash2, Loader2 } from 'lucide-react';
+import { uploadFileToS3 } from '../services/s3';
 
 interface DueDiligenceViewProps {
   items: DueDiligenceItem[];
@@ -8,6 +8,7 @@ interface DueDiligenceViewProps {
 }
 
 export const DueDiligenceView: React.FC<DueDiligenceViewProps> = ({ items, onItemChange }) => {
+  const [uploadingId, setUploadingId] = React.useState<string | null>(null);
 
   const stats = useMemo(() => {
     const totalCritical = items.filter(i => i.isCritical).length;
@@ -17,13 +18,23 @@ export const DueDiligenceView: React.FC<DueDiligenceViewProps> = ({ items, onIte
     return { totalCritical, criticalPending, completion };
   }, [items]);
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>, id: string) => {
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>, id: string) => {
     if (e.target.files && e.target.files.length > 0) {
       const file = e.target.files[0];
-      // Simulate upload by creating a URL
-      const fileUrl = URL.createObjectURL(file);
-      onItemChange(id, 'fileName', file.name);
-      onItemChange(id, 'fileUrl', fileUrl);
+      setUploadingId(id);
+
+      try {
+        // Upload to S3 under "due-diligence" folder
+        const s3Url = await uploadFileToS3(file, 'due-diligence');
+
+        onItemChange(id, 'fileName', file.name);
+        onItemChange(id, 'fileUrl', s3Url);
+      } catch (error) {
+        console.error("Upload failed", error);
+        alert("Erro ao fazer upload para S3. Verifique as credenciais e o CORS.");
+      } finally {
+        setUploadingId(null);
+      }
     }
   };
 
@@ -69,8 +80,8 @@ export const DueDiligenceView: React.FC<DueDiligenceViewProps> = ({ items, onIte
         </div>
 
         <div className={`p-6 rounded-3xl shadow-lg flex flex-col items-center justify-center transition-all duration-500 hover:scale-[1.05] ${stats.criticalPending === 0
-            ? 'bg-emerald-600 shadow-emerald-200 text-white'
-            : 'bg-rose-600 shadow-rose-200 text-white'
+          ? 'bg-emerald-600 shadow-emerald-200 text-white'
+          : 'bg-rose-600 shadow-rose-200 text-white'
           }`}>
           <span className="text-[10px] font-bold uppercase tracking-[0.3em] mb-1 opacity-80">Final Result</span>
           <p className="text-2xl font-black tracking-tighter">
@@ -151,9 +162,15 @@ export const DueDiligenceView: React.FC<DueDiligenceViewProps> = ({ items, onIte
                             </button>
                           </div>
                         ) : (
-                          <label className="p-2 bg-blue-600 text-white rounded-lg cursor-pointer hover:bg-blue-700 transition-all shadow-md shadow-blue-200">
-                            <input type="file" className="hidden" onChange={(e) => handleFileUpload(e, item.id)} />
-                            <UploadCloud size={16} />
+                          <label className={`p-2 rounded-lg cursor-pointer transition-all shadow-md ${uploadingId === item.id ? 'bg-slate-100 text-slate-400' : 'bg-blue-600 text-white hover:bg-blue-700 shadow-blue-200'}`}>
+                            {uploadingId === item.id ? (
+                              <Loader2 size={16} className="animate-spin" />
+                            ) : (
+                              <>
+                                <input type="file" className="hidden" disabled={!!uploadingId} onChange={(e) => handleFileUpload(e, item.id)} />
+                                <UploadCloud size={16} />
+                              </>
+                            )}
                           </label>
                         )
                       ) : (
