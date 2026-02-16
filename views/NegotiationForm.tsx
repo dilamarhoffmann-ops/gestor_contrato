@@ -4,15 +4,16 @@ import { LISTS } from '../constants';
 import { SectionCard } from '../components/SectionCard';
 import { SectionFAQ } from '../components/SectionFAQ';
 import { Building2, Calculator, MapPin, User, FileText, ShieldCheck, Flag, Plus, Trash2, HardHat, Hourglass, Fuel, ScrollText, Leaf, Ban, Scale, MessageSquare, UploadCloud, Eye, Download, Search, Loader2 } from 'lucide-react';
-import { uploadFileToS3 } from '../services/s3';
+import { uploadFile, getSignedViewUrl } from '../services/storage';
 
 interface NegotiationFormProps {
    data: NegotiationData;
    onChange: (field: keyof NegotiationData, value: any) => void;
+   activeSection: string;
+   onSectionChange: (section: string) => void;
 }
 
-export const NegotiationForm: React.FC<NegotiationFormProps> = ({ data, onChange }) => {
-   const [activeSection, setActiveSection] = useState('1');
+export const NegotiationForm: React.FC<NegotiationFormProps> = ({ data, onChange, activeSection, onSectionChange }) => {
    const [companyInput, setCompanyInput] = React.useState('');
    const [selectedTankType, setSelectedTankType] = useState('');
    const [loadingCep, setLoadingCep] = useState<{ [key: string]: boolean }>({});
@@ -172,10 +173,11 @@ export const NegotiationForm: React.FC<NegotiationFormProps> = ({ data, onChange
          try {
             const uploadedFiles = await Promise.all(
                filesArray.map(async (file) => {
-                  const url = await uploadFileToS3(file, 'documents');
+                  const { url, key } = await uploadFile(file, 'documents');
                   return {
                      name: file.name,
                      url: url,
+                     supabaseKey: key,
                      type: file.type
                   };
                })
@@ -196,6 +198,41 @@ export const NegotiationForm: React.FC<NegotiationFormProps> = ({ data, onChange
       const currentFiles = [...(data.documentos || [])];
       currentFiles.splice(index, 1);
       onChange('documentos', currentFiles);
+   };
+
+   const handleViewFile = async (file: any) => {
+      try {
+         const url = file.supabaseKey ? await getSignedViewUrl(file.supabaseKey) : file.url;
+         window.open(url, '_blank');
+      } catch (error) {
+         console.error("Erro ao visualizar arquivo:", error);
+         alert("Não foi possível gerar o link de visualização seguro.");
+      }
+   };
+
+   const handleDownloadFile = async (file: any) => {
+      try {
+         const url = file.supabaseKey ? await getSignedViewUrl(file.supabaseKey) : file.url;
+
+         // Fetch the file as a blob
+         const response = await fetch(url);
+         const blob = await response.blob();
+
+         // Create a blob URL and trigger download
+         const blobUrl = window.URL.createObjectURL(blob);
+         const link = document.createElement('a');
+         link.href = blobUrl;
+         link.download = file.name;
+         document.body.appendChild(link);
+         link.click();
+
+         // Cleanup
+         document.body.removeChild(link);
+         window.URL.revokeObjectURL(blobUrl);
+      } catch (error) {
+         console.error("Erro ao baixar arquivo:", error);
+         alert("Não foi possível gerar o link de download seguro.");
+      }
    };
 
    // Masking Helpers
@@ -303,8 +340,8 @@ export const NegotiationForm: React.FC<NegotiationFormProps> = ({ data, onChange
             setLoadingCnpj(prev => ({ ...prev, 'cessao': true }));
             fetch(`https://brasilapi.com.br/api/cnpj/v1/${clean}`)
                .then(res => res.json())
-               .then(data => {
-                  const formatted = `${data.razao_social} (${formatCNPJ(clean)})`;
+               .then(apiData => {
+                  const formatted = `${apiData.razao_social} (${formatCNPJ(clean)})`;
                   const currentList = data.empresasEnvolvidasCessao || [];
                   onChange('empresasEnvolvidasCessao', [...currentList, formatted]);
                   setCompanyInput('');
@@ -414,11 +451,11 @@ export const NegotiationForm: React.FC<NegotiationFormProps> = ({ data, onChange
                   {tabs.map((tab) => (
                      <button
                         key={tab.id}
-                        onClick={() => setActiveSection(tab.id)}
+                        onClick={() => onSectionChange(tab.id)}
                         className={`
                    flex items-center gap-2 px-4 py-4 text-sm font-medium transition-all border-b-2 whitespace-nowrap
                    ${activeSection === tab.id
-                              ? 'border-blue-600 text-blue-600 bg-blue-50/50'
+                              ? 'border-primary-blue text-primary-blue bg-ice-blue/50'
                               : 'border-transparent text-gray-400 hover:text-gray-700 hover:bg-gray-100/50 hover:scale-[1.02]'
                            }
                 `}
@@ -437,10 +474,18 @@ export const NegotiationForm: React.FC<NegotiationFormProps> = ({ data, onChange
                <div className="space-y-4">
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Número do Projeto *</label>
+                        <input
+                           type="text" name="numeroProjeto" value={data.numeroProjeto || ''} onChange={handleChange}
+                           placeholder="Ex: 001/2025"
+                           className="w-full border-gray-300 rounded-md shadow-sm border p-2 bg-white text-black focus:ring-primary-blue focus:border-primary-blue"
+                        />
+                     </div>
+                     <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">Nome Interno do Projeto *</label>
                         <input
                            type="text" name="nomeProjeto" value={data.nomeProjeto} onChange={handleChange}
-                           className="w-full border-gray-300 rounded-md shadow-sm border p-2 bg-white text-black focus:ring-blue-500 focus:border-blue-500"
+                           className="w-full border-gray-300 rounded-md shadow-sm border p-2 bg-white text-black focus:ring-primary-blue focus:border-primary-blue"
                         />
                      </div>
                      <div>
@@ -503,7 +548,6 @@ export const NegotiationForm: React.FC<NegotiationFormProps> = ({ data, onChange
                      <p className="text-xs text-gray-500 mt-2">Preencha a qualificação completa na Seção 4 (Partes Envolvidas).</p>
                   </div>
                </div>
-               <SectionFAQ sectionId="1" items={SECTION_FAQS['1'] || []} />
             </SectionCard>
          )}
 
@@ -600,7 +644,7 @@ export const NegotiationForm: React.FC<NegotiationFormProps> = ({ data, onChange
             <SectionCard title="3. Dados Operacionais" icon={<Flag size={20} />}>
                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="md:col-span-2 flex items-center gap-2 mb-2">
-                     <input type="checkbox" name="emOperacao" checked={data.emOperacao} onChange={handleChange} id="emOperacao" className="h-5 w-5 text-blue-600 rounded" />
+                     <input type="checkbox" name="emOperacao" checked={data.emOperacao} onChange={handleChange} id="emOperacao" className="h-5 w-5 text-primary-blue rounded" />
                      <label htmlFor="emOperacao" className="text-sm font-medium text-gray-700">O posto está em operação atualmente?</label>
                   </div>
 
@@ -723,16 +767,81 @@ export const NegotiationForm: React.FC<NegotiationFormProps> = ({ data, onChange
                            </select>
 
                            {data.proprietarioTemCoproprietarios && (
-                              <div className="mt-2">
-                                 <label className="block text-sm font-medium text-gray-700 mb-1">Listar coproprietários</label>
-                                 <textarea
-                                    name="proprietarioCoproprietariosLista"
-                                    value={data.proprietarioCoproprietariosLista || ''}
-                                    onChange={handleChange}
-                                    className="w-full border-gray-300 rounded-md shadow-sm border p-2 text-sm bg-white text-black"
-                                    placeholder="Nome, CPF/CNPJ, % propriedade..."
-                                    rows={2}
-                                 />
+                              <div className="mt-4 bg-slate-50 p-4 rounded-xl border border-slate-200">
+                                 <label className="block text-sm font-bold text-slate-700 mb-3">Lista de Coproprietários</label>
+
+                                 <div className="space-y-3">
+                                    {data.proprietarioCoproprietarios?.map((item, index) => (
+                                       <div key={index} className="flex gap-2 items-start bg-white p-3 rounded-lg border border-slate-200 shadow-sm">
+                                          <div className="flex-1">
+                                             <label className="text-[10px] uppercase font-bold text-slate-400 mb-1 block">Nome Completo</label>
+                                             <input
+                                                type="text"
+                                                value={item.nome}
+                                                onChange={(e) => {
+                                                   const newList = [...(data.proprietarioCoproprietarios || [])];
+                                                   newList[index] = { ...newList[index], nome: e.target.value };
+                                                   onChange('proprietarioCoproprietarios', newList);
+                                                }}
+                                                className="w-full border-slate-200 rounded-md p-1.5 text-sm"
+                                                placeholder="Nome do coproprietário"
+                                             />
+                                          </div>
+                                          <div className="w-48">
+                                             <label className="text-[10px] uppercase font-bold text-slate-400 mb-1 block">CPF / CNPJ</label>
+                                             <input
+                                                type="text"
+                                                value={item.cpfCnpj}
+                                                onChange={(e) => {
+                                                   const newList = [...(data.proprietarioCoproprietarios || [])];
+                                                   newList[index] = { ...newList[index], cpfCnpj: formatCpfCnpj(e.target.value) };
+                                                   onChange('proprietarioCoproprietarios', newList);
+                                                }}
+                                                className="w-full border-slate-200 rounded-md p-1.5 text-sm"
+                                                placeholder="000.000.000-00"
+                                             />
+                                          </div>
+                                          <div className="w-24">
+                                             <label className="text-[10px] uppercase font-bold text-slate-400 mb-1 block">% Prop.</label>
+                                             <input
+                                                type="number"
+                                                value={item.percentual}
+                                                onChange={(e) => {
+                                                   const newList = [...(data.proprietarioCoproprietarios || [])];
+                                                   newList[index] = { ...newList[index], percentual: parseFloat(e.target.value) };
+                                                   onChange('proprietarioCoproprietarios', newList);
+                                                }}
+                                                className="w-full border-slate-200 rounded-md p-1.5 text-sm text-center"
+                                                placeholder="0%"
+                                             />
+                                          </div>
+                                          <button
+                                             onClick={() => {
+                                                const newList = [...(data.proprietarioCoproprietarios || [])];
+                                                newList.splice(index, 1);
+                                                onChange('proprietarioCoproprietarios', newList);
+                                             }}
+                                             className="mt-6 p-2 text-rose-400 hover:text-rose-600 hover:bg-rose-50 rounded-full transition-colors"
+                                             title="Remover"
+                                          >
+                                             <Trash2 size={16} />
+                                          </button>
+                                       </div>
+                                    ))}
+                                 </div>
+
+                                 <button
+                                    onClick={() => {
+                                       onChange('proprietarioCoproprietarios', [
+                                          ...(data.proprietarioCoproprietarios || []),
+                                          { nome: '', cpfCnpj: '', percentual: 0 }
+                                       ]);
+                                    }}
+                                    className="mt-4 flex items-center gap-2 text-sm font-bold text-primary-blue hover:text-deep-blue transition-colors"
+                                 >
+                                    <Plus size={18} />
+                                    Adicionar Coproprietário
+                                 </button>
                               </div>
                            )}
                         </div>
@@ -893,8 +1002,14 @@ export const NegotiationForm: React.FC<NegotiationFormProps> = ({ data, onChange
                            )}
 
                            <div className="md:col-span-2">
-                              <label className="block text-sm font-medium text-gray-700 mb-1">Patrimônio declarado</label>
-                              <input type="text" name="garantiaFiadorPatrimonio" value={data.garantiaFiadorPatrimonio || ''} onChange={handleChange} className="w-full border-gray-300 rounded-md shadow-sm border p-2 bg-white text-black" placeholder="Para análise de solvência" />
+                              <label className="block text-sm font-medium text-gray-700 mb-1">Patrimônio declarado (R$)</label>
+                              <input
+                                 type="text"
+                                 name="garantiaFiadorPatrimonio"
+                                 value={formatCurrency(Number(data.garantiaFiadorPatrimonio) || 0)}
+                                 onChange={handleCurrencyChange}
+                                 className="w-full border-gray-300 rounded-md shadow-sm border p-2 bg-white text-black"
+                              />
                            </div>
 
                            <div className="md:col-span-2">
@@ -1087,7 +1202,10 @@ export const NegotiationForm: React.FC<NegotiationFormProps> = ({ data, onChange
                         </div>
                         <div>
                            <label className="block text-sm font-medium text-gray-700 mb-1">Data-base do reajuste *</label>
-                           <input type="text" name="dataBaseReajuste" value={data.dataBaseReajuste} onChange={handleChange} className="w-full border-gray-300 rounded-md shadow-sm border p-2 bg-white text-black" placeholder="Ex: Mês de aniversário" />
+                           <select name="dataBaseReajuste" value={data.dataBaseReajuste} onChange={handleChange} className="w-full border-gray-300 rounded-md shadow-sm border p-2 bg-white text-black">
+                              <option value="">Selecione o mês</option>
+                              {LISTS.meses_ano.map(mes => <option key={mes} value={mes}>{mes}</option>)}
+                           </select>
                         </div>
                      </div>
                   </div>
@@ -1277,7 +1395,10 @@ export const NegotiationForm: React.FC<NegotiationFormProps> = ({ data, onChange
                      {data.tipoBandeira === 'Bandeirado' && (
                         <div>
                            <label className="block text-sm font-medium text-gray-700 mb-1">Distribuidora pretendida</label>
-                           <input list="distribuidoras" name="distribuidoraPretendida" value={data.distribuidoraPretendida || ''} onChange={handleChange} className="w-full border-gray-300 rounded-md shadow-sm border p-2 bg-white text-black" placeholder="Digite ou selecione..." />
+                           <select name="distribuidoraPretendida" value={data.distribuidoraPretendida || ''} onChange={handleChange} className="w-full border-gray-300 rounded-md shadow-sm border p-2 bg-white text-black">
+                              <option value="">Selecione...</option>
+                              {LISTS.distribuidoras.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                           </select>
                         </div>
                      )}
                   </div>
@@ -1296,7 +1417,10 @@ export const NegotiationForm: React.FC<NegotiationFormProps> = ({ data, onChange
                            <>
                               <div>
                                  <label className="block text-sm font-medium text-gray-700 mb-1">Distribuidora atual</label>
-                                 <input list="distribuidoras" type="text" name="distribuidoraAtual" value={data.distribuidoraAtual || ''} onChange={handleChange} className="w-full border-gray-300 rounded-md shadow-sm border p-2 bg-white text-black" placeholder="Digite ou selecione..." />
+                                 <select name="distribuidoraAtual" value={data.distribuidoraAtual || ''} onChange={handleChange} className="w-full border-gray-300 rounded-md shadow-sm border p-2 bg-white text-black">
+                                    <option value="">Selecione...</option>
+                                    {LISTS.distribuidoras.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                                 </select>
                               </div>
                               <div>
                                  <label className="block text-sm font-medium text-gray-700 mb-1">Prazo remanescente (meses)</label>
@@ -1583,9 +1707,10 @@ export const NegotiationForm: React.FC<NegotiationFormProps> = ({ data, onChange
                            type="button"
                            onClick={handleAddTank}
                            disabled={!selectedTankType}
-                           className="bg-blue-600 text-white p-2 rounded-md hover:bg-blue-700 flex items-center justify-center transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                           className="bg-blue-600 text-white w-auto px-6 py-2 rounded shadow-sm hover:bg-blue-700 flex items-center gap-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                            <Plus size={20} />
+                           <span>Adicionar</span>
                         </button>
                      </div>
                   </div>
@@ -1680,7 +1805,7 @@ export const NegotiationForm: React.FC<NegotiationFormProps> = ({ data, onChange
                      </select>
                   </div>
                </div>
-               <SectionFAQ sectionId="12" items={SECTION_FAQS['12'] || []} />
+
             </SectionCard>
          )}
 
@@ -1791,7 +1916,7 @@ export const NegotiationForm: React.FC<NegotiationFormProps> = ({ data, onChange
                      </div>
 
                      <div className={`mt-2 ${isUploadingFiles ? 'opacity-70 pointer-events-none' : ''}`}>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">Adicionar documentos (Upload para AWS S3)</label>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Adicionar documentos</label>
                         <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 flex flex-col items-center justify-center bg-gray-50 hover:bg-gray-100 transition-colors relative cursor-pointer">
                            <input
                               type="file"
@@ -1823,23 +1948,20 @@ export const NegotiationForm: React.FC<NegotiationFormProps> = ({ data, onChange
                                        </span>
                                     </div>
                                     <div className="flex items-center gap-2">
-                                       <a
-                                          href={file.url}
-                                          target="_blank"
-                                          rel="noopener noreferrer"
+                                       <button
+                                          onClick={() => handleViewFile(file)}
                                           className="p-1.5 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
                                           title="Visualizar"
                                        >
                                           <Eye size={18} />
-                                       </a>
-                                       <a
-                                          href={file.url}
-                                          download={file.name}
+                                       </button>
+                                       <button
+                                          onClick={() => handleDownloadFile(file)}
                                           className="p-1.5 text-gray-500 hover:text-green-600 hover:bg-green-50 rounded transition-colors"
                                           title="Download"
                                        >
                                           <Download size={18} />
-                                       </a>
+                                       </button>
                                        <button
                                           onClick={() => handleRemoveFile(idx)}
                                           className="p-1.5 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
@@ -1860,7 +1982,7 @@ export const NegotiationForm: React.FC<NegotiationFormProps> = ({ data, onChange
                      </div>
                   </div>
                </div>
-               <SectionFAQ sectionId="15" items={SECTION_FAQS['15'] || []} />
+
             </SectionCard>
          )}
 

@@ -18,10 +18,10 @@ export const SectionFAQ: React.FC<SectionFAQProps> = ({ sectionId, items }) => {
     if (items.length === 0) return null;
 
     return (
-        <div className="mt-6 border-t border-blue-50 pt-6">
+        <div className="mt-6 border-t border-ice-blue pt-6">
             <button
                 onClick={() => setIsOpen(!isOpen)}
-                className="flex items-center gap-2 text-blue-600 font-bold text-xs uppercase tracking-widest hover:text-blue-700 transition-colors group"
+                className="flex items-center gap-2 text-primary-blue font-bold text-xs uppercase tracking-widest hover:text-deep-blue transition-colors group"
             >
                 <BookOpen size={16} className="group-hover:rotate-12 transition-transform" />
                 <span>Guia Rápido & Perguntas Frequentes (Seção {sectionId})</span>
@@ -33,17 +33,17 @@ export const SectionFAQ: React.FC<SectionFAQProps> = ({ sectionId, items }) => {
                     {items.map((item, idx) => (
                         <div
                             key={idx}
-                            className="bg-blue-50/50 rounded-2xl p-4 border border-blue-100 hover:bg-blue-50 transition-all interactive-card cursor-pointer"
+                            className="bg-ice-blue/50 rounded-2xl p-4 border border-light-blue hover:bg-ice-blue transition-all interactive-card cursor-pointer"
                             onClick={() => setExpandedIndex(expandedIndex === idx ? null : idx)}
                         >
                             <div className="flex justify-between items-start gap-4">
-                                <h4 className="text-sm font-bold text-blue-900">{item.question}</h4>
-                                <div className="text-blue-400 mt-1">
+                                <h4 className="text-sm font-bold text-deep-blue">{item.question}</h4>
+                                <div className="text-light-blue mt-1">
                                     {expandedIndex === idx ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
                                 </div>
                             </div>
                             {expandedIndex === idx && (
-                                <p className="mt-2 text-xs text-blue-700 leading-relaxed animate-slide-up">
+                                <p className="mt-2 text-xs text-deep-navy/70 leading-relaxed animate-slide-up">
                                     {item.answer}
                                 </p>
                             )}

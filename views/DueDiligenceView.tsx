@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { DueDiligenceItem } from '../types';
-import { UploadCloud, FileText, Trash2, Loader2 } from 'lucide-react';
-import { uploadFileToS3 } from '../services/s3';
+import { UploadCloud, FileText, Trash2, Loader2, MessageSquare, X, Check, AlertCircle } from 'lucide-react';
+import { uploadFile, getSignedViewUrl } from '../services/storage';
 
 interface DueDiligenceViewProps {
   items: DueDiligenceItem[];
@@ -10,6 +10,8 @@ interface DueDiligenceViewProps {
 
 export const DueDiligenceView: React.FC<DueDiligenceViewProps> = ({ items, onItemChange }) => {
   const [uploadingId, setUploadingId] = React.useState<string | null>(null);
+  const [editItem, setEditItem] = useState<DueDiligenceItem | null>(null);
+  const [tempObs, setTempObs] = useState('');
 
   const stats = useMemo(() => {
     const totalCritical = items.filter(i => i.isCritical).length;
@@ -25,14 +27,15 @@ export const DueDiligenceView: React.FC<DueDiligenceViewProps> = ({ items, onIte
       setUploadingId(id);
 
       try {
-        // Upload to S3 under "due-diligence" folder
-        const s3Url = await uploadFileToS3(file, 'due-diligence');
+        // Upload to Supabase under "due-diligence" folder
+        const { url, key } = await uploadFile(file, 'due-diligence');
 
         onItemChange(id, 'fileName', file.name);
-        onItemChange(id, 'fileUrl', s3Url);
+        onItemChange(id, 'fileUrl', url);
+        onItemChange(id, 'fileKey', key);
       } catch (error) {
         console.error("Upload failed", error);
-        alert("Erro ao fazer upload para S3. Verifique as credenciais e o CORS.");
+        alert("Erro ao fazer upload para o Storage. Verifique se o bucket existe.");
       } finally {
         setUploadingId(null);
       }
@@ -42,7 +45,46 @@ export const DueDiligenceView: React.FC<DueDiligenceViewProps> = ({ items, onIte
   const removeFile = (id: string) => {
     onItemChange(id, 'fileName', undefined);
     onItemChange(id, 'fileUrl', undefined);
+    onItemChange(id, 'fileKey', undefined);
   };
+
+  const handleViewFile = async (item: DueDiligenceItem) => {
+    try {
+      const url = item.fileKey ? await getSignedViewUrl(item.fileKey) : item.fileUrl;
+      if (url) window.open(url, '_blank');
+    } catch (error) {
+      console.error("Erro ao visualizar arquivo:", error);
+      alert("Não foi possível gerar o link de visualização seguro.");
+    }
+  };
+
+  const openObsModal = (item: DueDiligenceItem) => {
+    setEditItem(item);
+    setTempObs(item.observation || '');
+  };
+
+  const saveObs = () => {
+    if (editItem) {
+      onItemChange(editItem.id, 'observation', tempObs);
+      setEditItem(null);
+    }
+  };
+
+  const clearObs = () => {
+    setTempObs('');
+  };
+
+  // Lock scroll on open
+  useMemo(() => {
+    if (typeof document !== 'undefined') {
+      const main = document.querySelector('main');
+      if (editItem && main) {
+        main.style.overflow = 'hidden';
+      } else if (main) {
+        main.style.overflow = 'auto';
+      }
+    }
+  }, [editItem]);
 
   return (
     <div className="space-y-6">
@@ -72,7 +114,7 @@ export const DueDiligenceView: React.FC<DueDiligenceViewProps> = ({ items, onIte
           <div className="flex items-center gap-4">
             <div className="flex-1 bg-slate-100 rounded-full h-3 overflow-hidden">
               <div
-                className={`h-full transition-all duration-1000 ${stats.completion === 100 ? 'bg-emerald-500' : 'bg-blue-600'}`}
+                className={`h-full transition-all duration-1000 ${stats.completion === 100 ? 'bg-emerald-500' : 'bg-primary-blue'}`}
                 style={{ width: `${stats.completion}%` }}
               ></div>
             </div>
@@ -110,10 +152,11 @@ export const DueDiligenceView: React.FC<DueDiligenceViewProps> = ({ items, onIte
                 <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-slate-400">Categoria</th>
                 <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-slate-400">Documento / Verificação</th>
                 <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-slate-400 text-center">Crítico</th>
-                <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-slate-400">Status</th>
+                <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-slate-400 w-40">Status</th>
                 <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-slate-400 text-center">Anexo</th>
+                <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-slate-400">Data Receb.</th>
                 <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-slate-400">Validade</th>
-                <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-slate-400 w-48">Obs</th>
+                <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-slate-400 w-48">OBSERVAÇÃO</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -155,9 +198,12 @@ export const DueDiligenceView: React.FC<DueDiligenceViewProps> = ({ items, onIte
                       {item.status === 'Recebido' ? (
                         item.fileName ? (
                           <div className="flex items-center gap-2">
-                            <a href={item.fileUrl} target="_blank" className="p-2 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-600 hover:text-white transition-all shadow-sm">
+                            <button
+                              onClick={() => handleViewFile(item)}
+                              className="p-2 bg-ice-blue text-primary-blue rounded-lg hover:bg-primary-blue hover:text-white transition-all shadow-sm"
+                            >
                               <FileText size={16} />
-                            </a>
+                            </button>
                             <button onClick={() => removeFile(item.id)} className="p-2 text-rose-400 hover:text-rose-600">
                               <Trash2 size={14} />
                             </button>
@@ -184,19 +230,34 @@ export const DueDiligenceView: React.FC<DueDiligenceViewProps> = ({ items, onIte
                   <td className="px-6 py-4">
                     <input
                       type="date"
+                      value={item.dateReceived || ''}
+                      onChange={(e) => onItemChange(item.id, 'dateReceived', e.target.value)}
+                      className="text-[11px] font-medium text-slate-600 bg-transparent border-none focus:ring-0 p-0"
+                    />
+                  </td>
+                  <td className="px-6 py-4">
+                    <input
+                      type="date"
                       value={item.validity || ''}
                       onChange={(e) => onItemChange(item.id, 'validity', e.target.value)}
                       className="text-[11px] font-medium text-slate-600 bg-transparent border-none focus:ring-0 p-0"
                     />
                   </td>
                   <td className="px-6 py-4">
-                    <input
-                      type="text"
-                      value={item.observation || ''}
-                      onChange={(e) => onItemChange(item.id, 'observation', e.target.value)}
-                      placeholder="+"
-                      className="w-full text-[11px] font-medium text-slate-500 bg-transparent border-none focus:ring-0 italic placeholder-slate-300"
-                    />
+                    <button
+                      onClick={() => openObsModal(item)}
+                      className={`w-full text-left text-[11px] font-medium p-2 rounded-lg transition-all border border-transparent ${item.observation
+                        ? 'text-slate-600 bg-blue-50/50 hover:bg-blue-50 group-hover:border-blue-100'
+                        : 'text-slate-300 italic hover:text-slate-400'
+                        }`}
+                    >
+                      <div className="flex items-center gap-2">
+                        <MessageSquare size={12} className={item.observation ? 'text-primary-blue' : 'opacity-20'} />
+                        <span className="truncate max-w-[120px]">
+                          {item.observation || 'Adicionar nota...'}
+                        </span>
+                      </div>
+                    </button>
                   </td>
                 </tr>
               ))}
@@ -204,6 +265,80 @@ export const DueDiligenceView: React.FC<DueDiligenceViewProps> = ({ items, onIte
           </table>
         </div>
       </div>
+
+      {/* Observation Modal */}
+      {editItem && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-300">
+          <div className="bg-white w-full max-w-lg rounded-[2.5rem] shadow-2xl border border-white/20 overflow-hidden transform animate-in zoom-in-95 duration-300">
+            {/* Modal Header */}
+            <div className="px-8 py-6 bg-slate-50 border-b border-slate-100 flex justify-between items-center">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-blue-100 text-primary-blue rounded-xl">
+                  <MessageSquare size={20} />
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-slate-800">Observação</h3>
+                  <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">{editItem.category}</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setEditItem(null)}
+                className="p-2 hover:bg-slate-200 rounded-full transition-colors text-slate-400"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-8 space-y-6">
+              <div className="bg-blue-50/50 p-4 rounded-2xl border border-blue-100/50 flex items-start gap-4">
+                <AlertCircle size={20} className="text-primary-blue shrink-0 mt-1" />
+                <p className="text-sm text-slate-600 leading-relaxed font-medium">
+                  {editItem.description}
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Conteúdo da Nota</label>
+                <textarea
+                  autoFocus
+                  value={tempObs}
+                  onChange={(e) => setTempObs(e.target.value)}
+                  placeholder="Digite aqui os detalhes, pendências ou alertas sobre este item..."
+                  className="w-full h-40 bg-slate-50 border-none rounded-2xl p-4 text-sm text-slate-700 focus:ring-2 focus:ring-primary-blue/20 transition-all resize-none placeholder-slate-300"
+                />
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="px-8 py-6 bg-slate-50 border-t border-slate-100 flex justify-between items-center">
+              <button
+                onClick={clearObs}
+                className="flex items-center gap-2 px-4 py-2 text-rose-500 hover:bg-rose-50 rounded-xl font-bold text-xs transition-all"
+              >
+                <Trash2 size={16} />
+                Limpar Texto
+              </button>
+
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setEditItem(null)}
+                  className="px-6 py-2.5 text-slate-500 hover:bg-slate-200 rounded-xl font-bold text-xs transition-all"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={saveObs}
+                  className="px-8 py-2.5 bg-primary-blue text-white rounded-xl font-bold text-xs shadow-lg shadow-blue-500/20 hover:scale-[1.05] active:scale-95 transition-all flex items-center gap-2"
+                >
+                  <Check size={16} />
+                  Salvar Nota
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

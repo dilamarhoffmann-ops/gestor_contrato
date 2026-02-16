@@ -2,6 +2,18 @@
 
 export type RiskLevel = 'Verde' | 'Amarelo' | 'Vermelho';
 
+export type UserRole = 'Gestor' | 'Usuario';
+
+export interface User {
+  name: string;
+  email: string;
+  password?: string;
+  role: UserRole;
+  allowed: boolean;
+  area?: string;
+  requiresPasswordChange?: boolean;
+}
+
 export interface DropdownOption {
   value: string;
   label: string;
@@ -28,9 +40,17 @@ export interface ThirdPartyItem {
   prazo: string;
 }
 
+export interface CoOwnerItem {
+  nome: string;
+  cpfCnpj: string;
+  percentual: number;
+}
+
 export interface UploadedFile {
   name: string;
   url: string;
+  supabaseKey?: string;
+  s3Key?: string;
   type: string;
 }
 
@@ -39,12 +59,14 @@ export interface DueDiligenceItem {
   category: string;
   description: string;
   isCritical: boolean;
+  peso: number; // Peso do item no cálculo de risco (0-5)
   status: 'Pendente' | 'Recebido' | 'Não Aplicável';
   dateReceived?: string;
   validity?: string;
   observation?: string;
   fileName?: string;
   fileUrl?: string;
+  fileKey?: string;
 }
 
 export interface RiskScore {
@@ -68,9 +90,9 @@ export interface NegotiationData {
   prioridade: 'Alta' | 'Média' | 'Baixa';
   responsavelComercial: string;
   responsavelComercialEmail?: string;
-  
+
   // 2. Localização e Características
-  cep?: string; 
+  cep?: string;
   endereco: string;
   numero: string;
   bairro: string;
@@ -84,7 +106,7 @@ export interface NegotiationData {
   emOperacao: boolean;
   volumeMensal?: number; // Litros
   atividadesAdicionais?: string;
-  
+
   // 3. Proprietário (Qualification)
   proprietarioNome: string; // Nome ou Razão Social
   proprietarioCpfCnpj: string;
@@ -94,20 +116,20 @@ export interface NegotiationData {
   proprietarioTelefone?: string;
   proprietarioEmail?: string;
   tipoPessoa: 'Física' | 'Jurídica';
-  
+
   // Representatives (Proprietário)
   proprietarioRepresentanteNome: string;
   proprietarioRepresentanteCpf: string;
   proprietarioRepresentanteRg?: string;
   proprietarioRepresentanteCargo: string;
-  
+
   // Powers & Governance (Proprietário)
   proprietarioInstrumentoPoderes: 'Contrato Social' | 'Procuração' | 'Ata' | 'Outro';
   proprietarioDataInstrumento?: string;
-  
+
   // Ownership Structure (Proprietário)
   proprietarioTemCoproprietarios: boolean;
-  proprietarioCoproprietariosLista?: string;
+  proprietarioCoproprietarios: CoOwnerItem[];
   proprietarioTemUsufructuario: boolean;
   proprietarioTemEspolio: boolean;
   proprietarioAnuenciaIntervenientes: 'Sim' | 'Não' | 'Em negociação';
@@ -119,11 +141,11 @@ export interface NegotiationData {
   locatarioRepresentanteNome: string;
   locatarioRepresentanteCpf: string;
   locatarioRepresentanteCargo: string;
-  
+
   // 5. Garantias e Fiador (Detailed)
   exigeGarantidor: boolean;
   tipoGarantia: 'Caução em dinheiro' | 'Seguro fiança' | 'Fiança pessoa física' | 'Fiança pessoa jurídica' | 'Fiança bancária' | 'Cessão fiduciária de recebíveis' | 'Sem garantia';
-  
+
   // Caução
   garantiaCaucaoValor?: number;
   garantiaCaucaoConta?: string;
@@ -139,7 +161,7 @@ export interface NegotiationData {
   // Seguro Fiança
   garantiaSeguroSeguradora?: string;
   garantiaSeguroValor?: number;
-  
+
   // 6. Estrutura Contratual
   modeloContrato: 'Locação típica (Lei 8.245/91)' | 'Built to suit (art. 54-A)' | 'Locação atípica' | 'Contrato híbrido' | 'Arrendamento (fundo de comércio)' | 'Locação + opção de compra' | 'Sale and leaseback';
   justificativaModelo: string;
@@ -148,28 +170,28 @@ export interface NegotiationData {
   criterioPrecoOpcao?: string;
   direitoPreferenciaReforcado: boolean;
   cessaoIntraGrupo: boolean;
-  empresasEnvolvidasCessao?: string[]; 
-  
+  empresasEnvolvidasCessao?: string[];
+
   // 7. Condições Econômicas
   modeloAluguel: 'Fixo' | 'Fixo + variável' | 'Variável' | 'Fixo com mínimo + variável';
   valorAluguelFixo: number;
   aluguelVariavelCriterio?: string;
-  
+
   aluguelMinimoGarantido: boolean;
   valorAluguelMinimo?: number;
-  
+
   indexadorReajuste: 'IPCA' | 'IGP-M' | 'Outro';
   dataBaseReajuste: string;
-  
+
   temCarencia: boolean;
   carenciaMeses: number;
   tipoCarencia?: 'Total' | 'Parcial';
-  
+
   temPagamentoInicial: boolean;
   valorPagamentoInicial?: number;
   dataPagamentoInicial?: string;
   condicoesPagamentoInicial?: string;
-  
+
   responsavelIptu: 'Locador' | 'Locatário';
   responsavelSeguro: 'Locador' | 'Locatário';
   responsavelRegistro: 'Locador' | 'Locatário' | '50-50';
@@ -186,7 +208,7 @@ export interface NegotiationData {
   listaBenfeitoriasRemoviveis?: string;
   proprietarioParticipaInvestimento?: boolean;
   valorInvestimentoProprietario?: number;
-  
+
   // 9. Operação, Bandeira e Distribuidora
   tipoBandeira: 'Bandeirado' | 'Branca' | 'A definir';
   distribuidoraPretendida?: string;
@@ -222,7 +244,7 @@ export interface NegotiationData {
   seguroAmbiental: boolean;
   responsabilidadePassivo: string;
   clausulaIndenizacao: boolean;
-  
+
   // 12. Prazo e Saída
   prazoContratualMeses: number;
   renovacaoAutomatica: boolean;
@@ -282,9 +304,9 @@ export const INITIAL_DATA: NegotiationData = {
   areaConstruida: 0,
   tipoArea: 'Urbano',
   zoneamento: '',
-  emOperacao: true,
+  emOperacao: false,
   atividadesAdicionais: '',
-  
+
   // Owner
   proprietarioNome: '',
   proprietarioCpfCnpj: '',
@@ -297,6 +319,7 @@ export const INITIAL_DATA: NegotiationData = {
   proprietarioRepresentanteCargo: '',
   proprietarioInstrumentoPoderes: 'Contrato Social',
   proprietarioTemCoproprietarios: false,
+  proprietarioCoproprietarios: [],
   proprietarioTemUsufructuario: false,
   proprietarioTemEspolio: false,
   proprietarioAnuenciaIntervenientes: 'Em negociação',
@@ -308,11 +331,11 @@ export const INITIAL_DATA: NegotiationData = {
   locatarioRepresentanteNome: '',
   locatarioRepresentanteCpf: '',
   locatarioRepresentanteCargo: '',
-  
+
   // Garantias
   exigeGarantidor: false,
   tipoGarantia: 'Sem garantia',
-  garantiaFiadorRenunciaBeneficio: true,
+  garantiaFiadorRenunciaBeneficio: false,
   garantiaFiadorEndereco: { ...emptyAddress },
 
   modeloContrato: 'Locação típica (Lei 8.245/91)',
@@ -321,7 +344,7 @@ export const INITIAL_DATA: NegotiationData = {
   direitoPreferenciaReforcado: false,
   cessaoIntraGrupo: false,
   empresasEnvolvidasCessao: [],
-  
+
   // Economic defaults
   modeloAluguel: 'Fixo',
   valorAluguelFixo: 0,
@@ -334,16 +357,16 @@ export const INITIAL_DATA: NegotiationData = {
   responsavelIptu: 'Locatário',
   responsavelSeguro: 'Locatário',
   responsavelRegistro: 'Locatário',
-  
+
   // Investimentos
   capexEstimado: 0,
   prazoObrasDias: 0,
   responsavelObras: 'Grupo',
-  autorizacaoObras: true,
+  autorizacaoObras: false,
   tratamentoInvestimentoSaida: 'Amortização',
   destinoBenfeitorias: 'Todas',
   proprietarioParticipaInvestimento: false,
-  
+
   // Operação defaults
   tipoBandeira: 'Branca',
   temContratoVigenteDistribuidora: false,
@@ -356,7 +379,7 @@ export const INITIAL_DATA: NegotiationData = {
   alvaraMunicipalAtivo: 'Sim',
   avcbValido: 'Sim',
   situacaoAnp: 'Regular',
-  licencaAmbientalValida: true,
+  licencaAmbientalValida: false,
 
   // Ambiental defaults
   historicoContaminacao: 'Desconhecido',
@@ -375,11 +398,11 @@ export const INITIAL_DATA: NegotiationData = {
 
   // Section 13 defaults
   clauseNaoConcorrencia: false,
-  exclusividadeUsoImovel: true,
+  exclusividadeUsoImovel: false,
 
   // Section 14 defaults
   foroEleicao: '',
-  exigenciaConfidencialidade: true,
+  exigenciaConfidencialidade: false,
   clausulaArbitral: false,
 
   // Section 15 defaults

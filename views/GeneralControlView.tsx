@@ -1,14 +1,20 @@
 import React, { useMemo } from 'react';
 import { NegotiationData, RiskScore, DueDiligenceItem } from '../types';
-import { AlertTriangle, TrendingUp, Wallet, FileCheck, MapPin, User, Calendar, AlertCircle, Activity } from 'lucide-react';
+import { REQUIRED_FIELDS } from '../constants';
+import { AlertTriangle, TrendingUp, Wallet, FileCheck, MapPin, User, Calendar, AlertCircle, Activity, FolderOpen, Database, ArrowRight, Clock, Trash2, FileText } from 'lucide-react';
 
 interface GeneralControlViewProps {
    data: NegotiationData;
    risk: RiskScore;
    dueDiligence: DueDiligenceItem[];
+   projects: any[];
+   onLoadProject: (id: string) => void;
+   onNewProject: () => void;
+   onDeleteProject: (id: string, name: string) => void;
+   onNavigateToPending: () => void;
 }
 
-export const GeneralControlView: React.FC<GeneralControlViewProps> = ({ data, risk, dueDiligence }) => {
+export const GeneralControlView: React.FC<GeneralControlViewProps> = ({ data, risk, dueDiligence, projects, onLoadProject, onNewProject, onDeleteProject, onNavigateToPending }) => {
 
    // Helpers
    const formatCurrency = (val: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
@@ -30,29 +36,20 @@ export const GeneralControlView: React.FC<GeneralControlViewProps> = ({ data, ri
 
    // Completeness Logic
    const completeness = useMemo(() => {
-      let total = 0;
+      let total = REQUIRED_FIELDS.length;
       let filled = 0;
 
-      Object.entries(data).forEach(([key, value]) => {
-         // Exclude metadata or non-input fields if necessary, 
-         // here we count everything in data structure as a field to monitor.
-         if (key === 'documentos' || key === 'terceiros' || key === 'tanques') {
-            total++;
-            if (Array.isArray(value) && value.length > 0) filled++;
-         } else if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
-            // Recursive check for AddressData objects
-            Object.values(value).forEach(v => {
-               total++;
-               if (v !== '' && v !== null && v !== undefined) filled++;
-            });
-         } else {
-            total++;
-            // Count valid values (assuming 0 is valid for some numeric fields, but empty string is not)
-            if (value !== '' && value !== null && value !== undefined) {
-               // For numbers, we might count 0 as empty if it's a mandatory value like price,
-               // but keeping it simple: any defined value is "filled"
-               filled++;
-            }
+      REQUIRED_FIELDS.forEach(field => {
+         const value = data[field];
+         // Check for defined, non-null, non-empty string, and non-zero number
+         const isFilled =
+            value !== undefined &&
+            value !== null &&
+            value !== '' &&
+            (typeof value !== 'number' || value !== 0);
+
+         if (isFilled) {
+            filled++;
          }
       });
 
@@ -63,223 +60,236 @@ export const GeneralControlView: React.FC<GeneralControlViewProps> = ({ data, ri
    }, [data]);
 
    return (
-      <div className="space-y-6 animate-in fade-in duration-500">
-
-         {/* Control Summary Table - Modern Row Layout */}
-         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
-            <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm hover:shadow-md transition-shadow">
-               <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Completude</p>
-               <div className="flex items-end gap-2">
-                  <span className="text-2xl font-bold text-slate-800">{completeness.percentage}%</span>
-                  <div className={`mb-1 w-2 h-2 rounded-full ${completeness.percentage > 80 ? 'bg-green-500' : 'bg-blue-500'}`}></div>
-               </div>
-               <p className="text-[10px] text-slate-500 mt-2 italic line-clamp-1">Campos preenchidos</p>
-            </div>
-
-            <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm hover:shadow-md transition-shadow">
-               <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Pendências</p>
-               <div className="flex items-end gap-2">
-                  <span className="text-2xl font-bold text-slate-800">{completeness.pending}</span>
-                  <AlertCircle size={14} className="mb-2 text-slate-300" />
-               </div>
-               <p className="text-[10px] text-slate-500 mt-2 italic line-clamp-1">Campos em branco</p>
-            </div>
-
-            <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm hover:shadow-md transition-shadow">
-               <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Score Risco</p>
-               <div className="flex items-end gap-2">
-                  <span className="text-2xl font-bold text-slate-800">{risk.total}</span>
-                  <span className="text-[10px] font-bold text-slate-400 mb-1">/100</span>
-               </div>
-               <p className="text-[10px] text-slate-500 mt-2 italic line-clamp-1">Pontuação atual</p>
-            </div>
-
-            <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm hover:shadow-md transition-shadow">
-               <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Semáforo</p>
-               <div className="flex items-center gap-2">
-                  <span className={`text-sm font-bold px-3 py-1 rounded-full ${risk.level === 'Vermelho' ? 'bg-red-50 text-red-600' :
-                        risk.level === 'Amarelo' ? 'bg-yellow-50 text-yellow-600' :
-                           'bg-green-50 text-green-600'
-                     }`}>
-                     {risk.level}
-                  </span>
-               </div>
-               <p className="text-[10px] text-slate-500 mt-2 italic line-clamp-1">Status de aprovação</p>
-            </div>
-
-            <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm hover:shadow-md transition-shadow">
-               <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Projeto ID</p>
-               <div className="flex items-end gap-2">
-                  <span className="text-lg font-bold text-slate-800 truncate">{data.numeroProjeto || 'N/A'}</span>
-               </div>
-               <p className="text-[10px] text-slate-500 mt-2 italic line-clamp-1">Código sequencial</p>
+      <div className="space-y-8 animate-in fade-in duration-500 pb-12">
+         {/* Title Area */}
+         <div className="flex justify-between items-center">
+            <h2 className="text-2xl font-bold text-slate-800 tracking-tight">Painel de Gerenciamento</h2>
+            <div className="p-2 hover:bg-slate-100 rounded-lg cursor-pointer transition-colors">
+               <Activity size={20} className="text-slate-400" />
             </div>
          </div>
 
-         {/* Top Cards Row */}
-         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
 
-            {/* Risk Card */}
-            <div className={`p-8 rounded-[2rem] border shadow-xl flex flex-col justify-between relative overflow-hidden transition-all duration-500 hover:scale-[1.02] ${risk.level === 'Vermelho' ? 'bg-red-600 text-white border-red-400' :
-                  risk.level === 'Amarelo' ? 'bg-amber-500 text-white border-amber-300' :
-                     'bg-emerald-600 text-white border-emerald-400'
-               }`}>
-               <div className="absolute -top-6 -right-6 w-32 h-32 bg-white/10 rounded-full blur-2xl"></div>
-               <div>
-                  <div className="flex justify-between items-start mb-4">
-                     <h3 className="text-xs font-bold uppercase tracking-[0.2em] opacity-80">Risk Analysis</h3>
-                     <AlertTriangle size={24} className="opacity-50" />
+            {/* Main Content (Left 9 Columns) */}
+            <div className="lg:col-span-9 space-y-8">
+
+
+               {/* Controle Geral Block */}
+               <div className="bg-white p-8 rounded-[2rem] border border-slate-100 shadow-xl relative">
+                  <div className="flex justify-between items-center mb-8">
+                     <h3 className="text-lg font-bold text-slate-800 tracking-tight">Controle Geral</h3>
                   </div>
-                  <div className="flex items-baseline gap-2 mb-6">
-                     <span className="text-6xl font-black tracking-tighter">{risk.total}</span>
-                     <span className="text-sm font-bold opacity-70">pts</span>
+
+                  {/* Grid de Métricas */}
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                     {/* Card 1: Completude Obrigatória */}
+                     <div className="p-6 rounded-2xl bg-gradient-to-br from-blue-50 to-indigo-50 border border-blue-100 relative overflow-hidden group hover:shadow-lg transition-shadow">
+                        <div className="absolute top-0 right-0 w-20 h-20 bg-primary-blue/10 rounded-full blur-2xl"></div>
+                        <div className="relative">
+                           <p className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-2">Completude Obrigatória</p>
+                           <div className="flex items-baseline gap-2 mb-3">
+                              <span className="text-4xl font-black text-deep-blue">{completeness.percentage}</span>
+                              <span className="text-lg font-bold text-slate-400">%</span>
+                           </div>
+                           <div className="w-full h-2 bg-slate-200 rounded-full overflow-hidden">
+                              <div
+                                 className="h-full bg-gradient-to-r from-primary-blue to-deep-blue rounded-full transition-all duration-1000"
+                                 style={{ width: `${completeness.percentage}%` }}
+                              ></div>
+                           </div>
+                        </div>
+                     </div>
+
+                     {/* Card 2: Pendências Obrigatórias */}
+                     <div className="p-6 rounded-2xl bg-gradient-to-br from-orange-50 to-amber-50 border border-orange-100 relative overflow-hidden group hover:shadow-lg transition-shadow">
+                        <div className="absolute top-0 right-0 w-20 h-20 bg-accent-orange/10 rounded-full blur-2xl"></div>
+                        <div className="relative">
+                           <p className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-2">Pendências Obrigatórias</p>
+                           <div className="flex items-baseline gap-2 mb-3">
+                              <span className="text-4xl font-black text-accent-orange">{completeness.pending}</span>
+                              <span className="text-lg font-bold text-slate-400">campos</span>
+                           </div>
+                           <p className="text-xs text-slate-500 font-medium">
+                              {completeness.pending === 0 ? '✓ Todos os campos preenchidos' : `${completeness.pending} campo${completeness.pending > 1 ? 's' : ''} em branco`}
+                           </p>
+                        </div>
+                     </div>
+
+                     {/* Card 3: Risco Geral */}
+                     <div className={`p-6 rounded-2xl border relative overflow-hidden group hover:shadow-lg transition-shadow ${risk.level === 'Verde' ? 'bg-gradient-to-br from-green-50 to-emerald-50 border-green-100' :
+                        risk.level === 'Amarelo' ? 'bg-gradient-to-br from-yellow-50 to-amber-50 border-yellow-100' :
+                           'bg-gradient-to-br from-red-50 to-rose-50 border-red-100'
+                        }`}>
+                        <div className={`absolute top-0 right-0 w-20 h-20 rounded-full blur-2xl ${risk.level === 'Verde' ? 'bg-green-500/10' :
+                           risk.level === 'Amarelo' ? 'bg-yellow-500/10' :
+                              'bg-red-500/10'
+                           }`}></div>
+                        <div className="relative">
+                           <p className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-2">Risco Geral</p>
+                           <div className="flex items-baseline gap-2 mb-3">
+                              <span className={`text-4xl font-black ${risk.level === 'Verde' ? 'text-green-600' :
+                                 risk.level === 'Amarelo' ? 'text-yellow-600' :
+                                    'text-red-600'
+                                 }`}>{risk.total}</span>
+                              <span className="text-lg font-bold text-slate-400">/100</span>
+                           </div>
+                           <div className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-bold ${risk.level === 'Verde' ? 'bg-green-100 text-green-700' :
+                              risk.level === 'Amarelo' ? 'bg-yellow-100 text-yellow-700' :
+                                 'bg-red-100 text-red-700'
+                              }`}>
+                              <span className={`w-2 h-2 rounded-full ${risk.level === 'Verde' ? 'bg-green-500' :
+                                 risk.level === 'Amarelo' ? 'bg-yellow-500' :
+                                    'bg-red-500'
+                                 }`}></span>
+                              {risk.level}
+                           </div>
+                        </div>
+                     </div>
+                  </div>
+
+                  {/* Número do Projeto */}
+                  <div className="mt-6 p-4 bg-slate-50 rounded-xl border border-slate-200">
+                     <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                           <div className="w-10 h-10 rounded-lg bg-deep-blue/10 flex items-center justify-center">
+                              <FileText size={20} className="text-deep-blue" />
+                           </div>
+                           <div>
+                              <p className="text-xs font-bold text-slate-500 uppercase tracking-widest">Número do Projeto</p>
+                              <p className="text-lg font-black text-slate-800">{data.numeroProjeto || 'Não definido'}</p>
+                           </div>
+                        </div>
+                        <div className="text-right">
+                           <p className="text-xs font-bold text-slate-500 uppercase tracking-widest">Nome do Projeto</p>
+                           <p className="text-sm font-bold text-slate-700">{data.nomeProjeto || 'Sem nome'}</p>
+                        </div>
+                     </div>
                   </div>
                </div>
-               <div className="space-y-4">
-                  <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-[10px] font-bold uppercase tracking-widest opacity-90">
-                     <div className="flex justify-between border-b border-white/20 pb-1">
-                        <span>Dominial</span>
-                        <span>{risk.breakdown.dominial}/25</span>
+
+
+               {/* Saved Projects Section */}
+               <div className="bg-white p-8 rounded-[2rem] border border-slate-100 shadow-xl">
+                  <div className="flex justify-between items-center mb-6">
+                     <div className="flex items-center gap-3">
+                        <div className="p-2 bg-primary-blue/10 rounded-xl text-primary-blue">
+                           <Database size={20} />
+                        </div>
+                        <h3 className="text-lg font-bold text-slate-800 tracking-tight">Projetos Recentes</h3>
                      </div>
-                     <div className="flex justify-between border-b border-white/20 pb-1">
-                        <span>Ambiental</span>
-                        <span>{risk.breakdown.ambiental}/25</span>
-                     </div>
-                     <div className="flex justify-between border-b border-white/20 pb-1">
-                        <span>Regulatório</span>
-                        <span>{risk.breakdown.regulatorio}/25</span>
-                     </div>
-                     <div className="flex justify-between border-b border-white/20 pb-1">
-                        <span>Econômico</span>
-                        <span>{risk.breakdown.economico}/25</span>
+                     <div className="flex items-center gap-3">
+                        <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">{projects.length} registros</span>
+                        <button
+                           onClick={onNewProject}
+                           className="px-4 py-2 bg-primary-blue text-white rounded-xl font-bold hover:bg-deep-blue transition-all shadow-md flex items-center gap-2 text-sm"
+                        >
+                           <FolderOpen size={16} />
+                           Novo Projeto
+                        </button>
                      </div>
                   </div>
-                  <div className="w-full bg-black/20 h-2 rounded-full overflow-hidden">
-                     <div className="bg-white h-full shadow-[0_0_10px_rgba(255,255,255,0.5)]" style={{ width: `${Math.min(risk.total, 100)}%` }}></div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                     {projects.length > 0 ? (
+                        projects.slice(0, 4).map((project: any) => (
+                           <div
+                              key={project.id}
+                              className="group p-4 rounded-2xl border border-slate-50 hover:border-primary-blue/30 hover:bg-primary-blue/5 transition-all flex items-center justify-between"
+                           >
+                              <div
+                                 onClick={() => onLoadProject(project.id)}
+                                 className="flex items-center gap-4 flex-1 cursor-pointer"
+                              >
+                                 <div className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center text-slate-400 group-hover:bg-white group-hover:text-primary-blue transition-colors">
+                                    <FolderOpen size={18} />
+                                 </div>
+                                 <div className="overflow-hidden">
+                                    <h4 className="font-bold text-slate-800 text-sm truncate">{project.nome_projeto || 'Sem título'}</h4>
+                                    <div className="flex items-center gap-2 text-[10px] text-slate-400 font-medium">
+                                       <Clock size={10} />
+                                       <span>{new Date(project.updated_at).toLocaleDateString('pt-BR')}</span>
+                                    </div>
+                                 </div>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                 <button
+                                    onClick={(e) => {
+                                       e.stopPropagation();
+                                       onDeleteProject(project.id, project.nome_projeto || 'Sem título');
+                                    }}
+                                    className="p-2 rounded-xl text-slate-400 hover:text-red-500 hover:bg-red-50 transition-all opacity-0 group-hover:opacity-100"
+                                    title="Excluir projeto"
+                                 >
+                                    <Trash2 size={16} />
+                                 </button>
+                                 <ArrowRight size={16} className="text-slate-300 group-hover:text-primary-blue group-hover:translate-x-1 transition-all" />
+                              </div>
+                           </div>
+                        ))
+                     ) : (
+                        <div className="col-span-2 py-10 text-center text-slate-400 bg-slate-50 rounded-2xl border border-dashed border-slate-200">
+                           <Database size={32} className="mx-auto mb-2 opacity-20" />
+                           <p className="text-sm font-medium">Nenhum projeto salvo encontrado.</p>
+                        </div>
+                     )}
                   </div>
                </div>
             </div>
 
-            {/* Economics Card */}
-            <div className="bg-white p-6 rounded-lg border border-gray-200 shadow-sm flex flex-col justify-between">
-               <div className="flex justify-between items-start">
-                  <div>
-                     <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-1">Economics</h3>
-                     <p className="text-2xl font-bold text-gray-800">{formatCurrency(data.valorAluguelFixo)} <span className="text-xs font-normal text-gray-400">/mês</span></p>
+            {/* Right Sidebar (3 Columns) */}
+            <div className="lg:col-span-3 space-y-8">
+               {/* Donut Chart Block */}
+               <div className="bg-white p-8 rounded-[2rem] border border-slate-100 shadow-xl flex flex-col items-center">
+                  <div className="relative w-40 h-40 flex items-center justify-center mb-8">
+                     <svg className="w-full h-full transform -rotate-90">
+                        <circle cx="80" cy="80" r="70" fill="none" stroke="#f1f5f9" strokeWidth="15" />
+                        <circle cx="80" cy="80" r="70" fill="none" stroke="#052659" strokeWidth="15"
+                           strokeDasharray={440} strokeDashoffset={440 - (440 * completeness.percentage) / 100}
+                           strokeLinecap="round" className="transition-all duration-1000" />
+                     </svg>
+                     <div className="absolute inset-0 flex flex-col items-center justify-center">
+                        <span className="text-3xl font-black text-slate-800">{completeness.percentage}%</span>
+                     </div>
                   </div>
-                  <div className="p-2 bg-blue-50 text-blue-600 rounded-lg">
-                     <Wallet size={24} />
+
+
+                  <div className="w-full space-y-4">
+                     {['Dados Gerais', 'Localização', 'Operacional', 'Partes'].map((step, idx) => (
+                        <div key={step} className="flex flex-col gap-1">
+                           <div className="flex justify-between items-center text-[10px] font-bold uppercase tracking-widest text-slate-500">
+                              <span>{step}</span>
+                              <span className="text-slate-800">{idx === 0 ? '100%' : idx === 1 ? '85%' : '40%'}</span>
+                           </div>
+                           <div className="h-1.5 w-full bg-slate-100 rounded-full overflow-hidden">
+                              <div className="h-full bg-accent-orange" style={{ width: idx === 0 ? '100%' : idx === 1 ? '85%' : '40%' }}></div>
+                           </div>
+                        </div>
+                     ))}
                   </div>
+
+                  <button
+                     onClick={onNavigateToPending}
+                     className="w-full mt-8 py-3 bg-accent-orange text-white rounded-2xl font-bold uppercase tracking-widest shadow-xl shadow-orange-500/20 hover:scale-[1.02] active:scale-95 transition-all text-xs">
+                     Completar Cadastro
+                  </button>
                </div>
-               <div className="mt-4 pt-4 border-t border-gray-100 grid grid-cols-2 gap-4">
-                  <div>
-                     <p className="text-xs text-gray-500">CAPEX Estimado</p>
-                     <p className="font-semibold text-gray-700">{formatCurrency(data.capexEstimado)}</p>
-                  </div>
-                  <div>
-                     <p className="text-xs text-gray-500">Volume (L)</p>
-                     <p className="font-semibold text-gray-700">{formatNumber(data.volumeMensal || data.volumeGalonagemMensal || 0)}</p>
+
+               {/* Alerts Section */}
+               <div className="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-lg">
+                  <h3 className="text-sm font-bold text-slate-800 uppercase tracking-widest mb-4 flex items-center gap-2">
+                     <AlertTriangle size={16} className="text-accent-orange" />
+                     Pontos de Atenção
+                  </h3>
+                  <div className="space-y-4">
+                     {risk.triggers.slice(0, 3).map((trigger, i) => (
+                        <div key={i} className="p-3 bg-red-50/50 border-l-4 border-red-500 rounded-r-xl">
+                           <p className="text-[10px] font-bold text-red-900 leading-tight">{trigger}</p>
+                        </div>
+                     ))}
                   </div>
                </div>
             </div>
-
-            {/* Due Diligence Status */}
-            <div className="bg-white p-6 rounded-lg border border-gray-200 shadow-sm flex flex-col justify-between">
-               <div className="flex justify-between items-start">
-                  <div>
-                     <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-1">Due Diligence</h3>
-                     <p className="text-2xl font-bold text-gray-800">{ddProgress}% <span className="text-xs font-normal text-gray-400">concluído</span></p>
-                  </div>
-                  <div className="p-2 bg-purple-50 text-purple-600 rounded-lg">
-                     <FileCheck size={24} />
-                  </div>
-               </div>
-               <div className="mt-4 pt-4 border-t border-gray-100 flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                     <div className={`flex items-center justify-center w-8 h-8 rounded-full font-bold text-sm ${ddCriticalPending > 0 ? 'bg-red-100 text-red-600' : 'bg-green-100 text-green-600'}`}>
-                        {ddCriticalPending}
-                     </div>
-                     <div className="text-xs text-gray-600 leading-tight">
-                        Itens Críticos<br />Pendentes
-                     </div>
-                  </div>
-                  <div className="text-right">
-                     <p className="text-xs text-gray-500">Total Itens</p>
-                     <p className="font-semibold text-gray-700">{ddTotal}</p>
-                  </div>
-               </div>
-            </div>
-         </div>
-
-         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-
-            {/* Project Info */}
-            <div className="lg:col-span-2 bg-white rounded-lg border border-gray-200 shadow-sm p-6">
-               <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center gap-2">
-                  <MapPin className="text-blue-500" size={20} />
-                  Dados do Projeto
-               </h3>
-
-               <div className="grid grid-cols-1 md:grid-cols-2 gap-y-6 gap-x-8">
-                  <div>
-                     <p className="text-xs text-gray-500 uppercase font-bold mb-1">Nome do Projeto</p>
-                     <p className="text-gray-900 font-medium text-lg">{data.nomeProjeto || 'Não informado'}</p>
-                     <span className={`inline-block mt-1 px-2 py-0.5 rounded text-xs font-medium ${data.prioridade === 'Alta' ? 'bg-red-100 text-red-700' : data.prioridade === 'Média' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-700'}`}>
-                        Prioridade {data.prioridade}
-                     </span>
-                  </div>
-
-                  <div>
-                     <p className="text-xs text-gray-500 uppercase font-bold mb-1">Localização</p>
-                     <p className="text-gray-900">{data.endereco ? `${data.endereco}, ${data.numero}` : '-'}</p>
-                     <p className="text-gray-600 text-sm">{data.cidade} - {data.uf}</p>
-                     {data.tipoArea && <p className="text-xs text-gray-400 mt-1">{data.tipoArea} {data.zoneamento ? `• ${data.zoneamento}` : ''}</p>}
-                  </div>
-
-                  <div>
-                     <p className="text-xs text-gray-500 uppercase font-bold mb-1 flex items-center gap-1"><User size={12} /> Responsável Comercial</p>
-                     <p className="text-gray-900">{data.responsavelComercial || '-'}</p>
-                     <p className="text-gray-500 text-sm">{data.responsavelComercialEmail}</p>
-                  </div>
-
-                  <div>
-                     <p className="text-xs text-gray-500 uppercase font-bold mb-1 flex items-center gap-1"><Calendar size={12} /> Previsão</p>
-                     <p className="text-gray-900">Início: {data.dataPrevista ? new Date(data.dataPrevista).toLocaleDateString('pt-BR') : '-'}</p>
-                     <p className="text-gray-500 text-sm">Prazo Contrato: {data.prazoContratualMeses} meses</p>
-                  </div>
-               </div>
-            </div>
-
-            {/* Alerts / Triggers */}
-            <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-6">
-               <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center gap-2">
-                  <AlertCircle className="text-orange-500" size={20} />
-                  Pontos de Atenção
-               </h3>
-
-               <div className="space-y-3">
-                  {risk.triggers.length === 0 && ddCriticalPending === 0 && (
-                     <div className="text-center py-8 text-gray-400 bg-gray-50 rounded-lg border border-dashed border-gray-200">
-                        <p>Nenhum alerta crítico.</p>
-                     </div>
-                  )}
-
-                  {risk.triggers.map((trigger, idx) => (
-                     <div key={`trig-${idx}`} className="flex gap-3 items-start p-3 bg-red-50 border border-red-100 rounded text-sm text-red-800">
-                        <AlertTriangle size={16} className="mt-0.5 shrink-0" />
-                        <span>{trigger}</span>
-                     </div>
-                  ))}
-
-                  {ddCriticalPending > 0 && (
-                     <div className="flex gap-3 items-start p-3 bg-orange-50 border border-orange-100 rounded text-sm text-orange-800">
-                        <FileCheck size={16} className="mt-0.5 shrink-0" />
-                        <span>Existem <strong>{ddCriticalPending} documentos críticos</strong> pendentes na Due Diligence.</span>
-                     </div>
-                  )}
-               </div>
-            </div>
-
          </div>
       </div>
    );
